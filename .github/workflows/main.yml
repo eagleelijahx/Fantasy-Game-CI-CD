@@ -8,35 +8,31 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest # Switches the machine to Windows
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install Windows Cross-Compiler and Allegro 5
+    # Installs Allegro 5 cleanly for Windows using vcpkg
+    - name: Install Allegro 5 via vcpkg
       run: |
-        sudo apt-get update
-        # Installs the MinGW cross-compiler and the Windows version of Allegro 5
-        sudo apt-get install -y build-essential mingw-w64 binutils-mingw-w64 g++-mingw-w64
+        vcpkg install allegro5:x64-windows
 
+    # Compiles natively on Windows using Microsoft's C++ Compiler (MSVC)
     - name: Compile Game for Windows (.exe)
       run: |
-        # Using the MinGW compiler instead of standard Linux g++
-        x86_64-w64-mingw32-g++ -std=c++17 *.cpp -o FantasyGame.exe \
-          -lallegro-static \
-          -lallegro_main-static \
-          -lallegro_image-static \
-          -lallegro_audio-static \
-          -lallegro_acodec-static \
-          -lallegro_font-static \
-          -lallegro_ttf-static \
-          -lallegro_primitives-static \
-          -lallegro_dialog-static \
-          -lwinmm -lgdi32 -luser32 -lole32 -lshlwapi
+        cl.exe /std:c++17 *.cpp /Fe:FantasyGame.exe `
+          /I"C:\vcpkg\installed\x64-windows\include" `
+          /link /LIBPATH:"C:\vcpkg\installed\x64-windows\lib" `
+          allegro.lib allegro_main.lib allegro_image.lib `
+          allegro_audio.lib allegro_acodec.lib allegro_font.lib `
+          allegro_ttf.lib allegro_primitives.lib allegro_dialog.lib
 
     # --- Simple CD Component ---
     - name: Upload Windows Build Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/unlock-artifact@v4
       with:
         name: FantasyGame-Windows-Build
-        path: FantasyGame.exe
+        path: |
+          FantasyGame.exe
+          C:\vcpkg\installed\x64-windows\bin\*.dll
