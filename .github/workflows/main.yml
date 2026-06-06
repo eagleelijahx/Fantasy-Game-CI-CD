@@ -13,27 +13,30 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install Dependencies and Allegro 5
+    - name: Install Windows Cross-Compiler and Allegro 5
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake liballegro5-dev
+        # Installs the MinGW cross-compiler and the Windows version of Allegro 5
+        sudo apt-get install -y build-essential mingw-w64 binutils-mingw-w64 g++-mingw-w64
 
-    - name: Compile Game (All CPP Files with Addons)
+    - name: Compile Game for Windows (.exe)
       run: |
-        g++ -std=c++17 *.cpp -o FantasyGame \
-          -lallegro \
-          -lallegro_main \
-          -lallegro_image \
-          -lallegro_audio \
-          -lallegro_acodec \
-          -lallegro_font \
-          -lallegro_ttf \
-          -lallegro_primitives \
-          -lallegro_dialog
+        # Using the MinGW compiler instead of standard Linux g++
+        x86_64-w64-mingw32-g++ -std=c++17 *.cpp -o FantasyGame.exe \
+          -lallegro-static \
+          -lallegro_main-static \
+          -lallegro_image-static \
+          -lallegro_audio-static \
+          -lallegro_acodec-static \
+          -lallegro_font-static \
+          -lallegro_ttf-static \
+          -lallegro_primitives-static \
+          -lallegro_dialog-static \
+          -lwinmm -lgdi32 -luser32 -lole32 -lshlwapi
 
-    # --- Ultra-Simple CD Component ---
-    - name: Upload Build Artifact
+    # --- Simple CD Component ---
+    - name: Upload Windows Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: FantasyGame-Linux-Build
-        path: FantasyGame
+        name: FantasyGame-Windows-Build
+        path: FantasyGame.exe
