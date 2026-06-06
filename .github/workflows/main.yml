@@ -1,4 +1,4 @@
-name: C++ CI/CD with Allegro 5 (Windows Native Build)
+name: C++ CI/CD (Linux Cross-Compile to Windows)
 
 on:
   push:
@@ -8,36 +8,33 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up MSYS2 (Compiler & Allegro)
-      uses: msys2/setup-msys2@v2
-      with:
-        msystem: UCRT64
-        update: true
-        install: >-
-          mingw-w64-ucrt-x86_64-gcc
-          mingw-w64-ucrt-x86_64-cmake
-          mingw-w64-ucrt-x86_64-allegro5
-
-    - name: Compile Game for Windows
-      shell: msys2 {0}
+    - name: Install Linux Build Tools & Cross-Compiler
       run: |
-        g++ -std=c++17 *.cpp -o FantasyGame.exe \
-          -lallegro \
-          -lallegro_main \
-          -lallegro_image \
-          -lallegro_audio \
-          -lallegro_acodec \
-          -lallegro_font \
-          -lallegro_ttf \
-          -lallegro_primitives \
-          -lallegro_dialog
+        sudo apt-get update
+        sudo apt-get install -y build-essential mingw-w64 wget unzip
 
+    - name: Download & Extract Windows Allegro 5 Libraries
+      run: |
+        # This downloads the official pre-compiled Allegro 5 binaries for Windows MinGW
+        wget https://github.com/liballeg/allegro5/releases/download/5.2.8.0/allegro-x86_64-w64-mingw32-gcc-12.1.0-posix-seh-static-5.2.8.0.zip -O allegro.zip
+        unzip allegro.zip -d allegro_win/
+
+    - name: Compile Game to Windows .exe
+      run: |
+        # Cross-compiling using the MinGW compiler toolchain on Ubuntu
+        x86_64-w64-mingw32-g++ -std=c++17 *.cpp -o FantasyGame.exe \
+          -I./allegro_win/allegro/include \
+          -L./allegro_win/allegro/lib \
+          -lallegro-monolith.dll \
+          -static-libgcc -static-libstdc++
+
+    # === CONTINUOUS DELIVERY (CD) STEP ===
     - name: Upload Windows Game Bundle
       uses: actions/upload-artifact@v4
       with:
