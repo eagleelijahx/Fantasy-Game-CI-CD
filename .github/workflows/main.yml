@@ -27,12 +27,13 @@ jobs:
 
     - name: Compile Game to Windows .exe
       run: |
-        # Cross-compiling using the MinGW compiler toolchain on Ubuntu
+        # Added -lwinmm at the end so the compiler understands native Windows PlaySoundA audio functions
         x86_64-w64-mingw32-g++ -std=c++17 *.cpp -o FantasyGame.exe \
           -I./allegro_win/allegro/include \
           -L./allegro_win/allegro/lib \
           -lallegro-monolith.dll \
-          -static-libgcc -static-libstdc++
+          -static-libgcc -static-libstdc++ \
+          -lwinmm
 
     # === CONTINUOUS DELIVERY (CD) STEP ===
     - name: Upload Windows Game Bundle
@@ -40,6 +41,11 @@ jobs:
       with:
         name: FantasyGame-Windows-Build
         path: |
+          FantasyGame.exe
+          allegro_monolith-5.2.dll
+          *.ttf
+          *.png
+          *.wav
           FantasyGame.exe
           allegro_monolith-5.2.dll
           *.ttf
