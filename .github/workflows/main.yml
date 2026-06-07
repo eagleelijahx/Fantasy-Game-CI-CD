@@ -1,4 +1,4 @@
-name: C++ CI with Allegro 5
+name: C++ CI & CD with Allegro 5
 on:
   push:
     branches: [ "main" ]
@@ -26,7 +26,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-vcpkg-dynamic-
 
-    # --- 2. Install Allegro 5 (Back to your original working configuration) ---
+    # --- 2. Install Allegro 5 (Dynamic configuration) ---
     - name: Install Allegro 5 via vcpkg
       run: |
         vcpkg install allegro5:x64-windows
@@ -35,33 +35,30 @@ jobs:
     - name: Setup MSVC Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1
 
-    # --- 4. Compile + Fix GCC Header + Create ZIP Bundle ---
+    # --- 4. Compile + Safe Header Injection + Create ZIP Bundle ---
     - name: Compile Game and Bundle Assets
       run: |
         # Create a fake bits folder to trick MSVC into finding stdc++.h
         mkdir bits -ErrorAction SilentlyContinue
-        $headers = '@'
-        #include <iostream>
-        #include <vector>
-        #include <string>
-        #include <algorithm>
-        '@
-        $headers | Out-File -FilePath bits\stdc++.h -Encoding utf8
+        
+        # Clean, simple echoing to build the proxy header file safely without parsing bugs
+        echo "#include <iostream>" > bits\stdc++.h
+        echo "#include <vector>" >> bits\stdc++.h
+        echo "#include <string>" >> bits\stdc++.h
+        echo "#include <algorithm>" >> bits\stdc++.h
+        echo "#include <cmath>" >> bits\stdc++.h
+        echo "#include <memory>" >> bits\stdc++.h
+        echo "#include <map>" >> bits\stdc++.h
+        echo "#include <set>" >> bits\stdc++.h
 
-        # Compile exactly using your original working project configuration
-        cl.exe /std:c++17 *.cpp /Fe:FantasyGame.exe `
-          /I. `
-          /I"C:\vcpkg\installed\x64-windows\include" `
-          /link /LIBPATH:"C:\vcpkg\installed\x64-windows\lib" `
-          allegro.lib allegro_main.lib allegro_image.lib `
-          allegro_audio.lib allegro_acodec.lib allegro_font.lib `
-          allegro_ttf.lib allegro_primitives.lib allegro_dialog-static.lib
+        # Compile using single-line syntax to avoid line-continuation layout bugs
+        cl.exe /std:c++17 *.cpp /Fe:FantasyGame.exe /I. /I"C:\vcpkg\installed\x64-windows\include" /link /LIBPATH:"C:\vcpkg\installed\x64-windows\lib" allegro.lib allegro_main.lib allegro_image.lib allegro_audio.lib allegro_acodec.lib allegro_font.lib allegro_ttf.lib allegro_primitives-static.lib allegro_dialog-static.lib
 
         # Create a clean deployment folder, gather the files, and compress them into a ZIP
-        mkdir dist
+        mkdir dist -ErrorAction SilentlyContinue
         copy FantasyGame.exe dist\
         copy C:\vcpkg\installed\x64-windows\bin\*.dll dist\
-        Compress-Archive -Path dist\* -DestinationPath FantasyGame-Windows-Build.zip
+        Compress-Archive -Path dist\* -DestinationPath FantasyGame-Windows-Build.zip -Force
 
     # --- 5. Upload to the Artifacts Tab ---
     - name: Upload Windows Build Artifact
