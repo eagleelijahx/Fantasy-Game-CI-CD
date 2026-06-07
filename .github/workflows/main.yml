@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# This ensures the runner uses the current standard for Node.js actions
+# Silences Node 20 deprecation warnings and forces the runner to use Node 24
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -14,14 +14,13 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write # Required to allow the workflow to create a GitHub Release
+      contents: write
 
     steps:
-    # 1. Pull the code from your repository
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 2. Speed up build time by restoring previously compiled vcpkg libraries
+    # --- 1. Caching Step (Speeds up subsequent runs) ---
     - name: Restore vcpkg artifacts from cache
       uses: actions/cache@v4
       with:
@@ -33,39 +32,65 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-vcpkg-dynamic-
 
-    # 3. Install Allegro 5 dependencies needed for compilation
+    # --- 2. Install Allegro 5 (Dynamic configuration) ---
     - name: Install Allegro 5 via vcpkg
       run: |
         vcpkg install allegro5:x64-windows
 
-    # 4. Initialize the MSVC compiler environment
+    # --- 3. Setup MSVC Compiler Path ---
     - name: Setup MSVC Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1
 
-    # 5. Compile the C++ code and bundle assets into a ZIP file
+    # --- 4. Compile + Safe Header Injection + Asset Bundling + Create ZIP Bundle ---
     - name: Compile Game and Bundle Assets
       run: |
-        # Create a proxy header to resolve common C++ header issues
+        # Create a fake bits folder to trick MSVC into finding stdc++.h
         mkdir bits -ErrorAction SilentlyContinue
+        
+        # Clean, simple echoing to build the proxy header file safely without parsing bugs
         echo "#include <iostream>" > bits\stdc++.h
-        # ... (rest of your includes) ...
+        echo "#include <vector>" >> bits\stdc++.h
+        echo "#include <string>" >> bits\stdc++.h
+        echo "#include <algorithm>" >> bits\stdc++.h
+        echo "#include <cmath>" >> bits\stdc++.h
+        echo "#include <memory>" >> bits\stdc++.h
+        echo "#include <map>" >> bits\stdc++.h
+        echo "#include <set>" >> bits\stdc++.h
+        
+        # FIXES: Injecting the missing file stream and Windows multimedia headers
+        echo "#include <fstream>" >> bits\stdc++.h
+        echo "#include <windows.h>" >> bits\stdc++.h
         echo "#include <mmsystem.h>" >> bits\stdc++.h
         
-        # Compile the game with Allegro link libraries
-        cl.exe /std:c++17 /D_HAS_STD_BYTE=0 /DNOMINMAX *.cpp /Fe:FantasyGame.exe /I. /I"C:\vcpkg\installed\x64-windows\include" /link /LIBPATH:"C:\vcpkg\installed\x64-windows\lib" allegro.lib allegro_main.lib allegro_image.lib allegro_audio.lib allegro_acodec.lib allegro_font.lib allegro_ttf.lib allegro_primitives.lib allegro_dialog.lib Winmm.lib
+        # Compile using single-line syntax (Fixed static library names to match dynamic vcpkg layout)
+        # Added /EHsc flag to resolve C++ exception handling errors
+        cl.exe /EHsc /std:c++17 /D_HAS_STD_BYTE=0 /DNOMINMAX *.cpp /Fe:FantasyGame.exe /I. /I"C:\vcpkg\installed\x64-windows\include" /link /LIBPATH:"C:\vcpkg\installed\x64-windows\lib" allegro.lib allegro_main.lib allegro_image.lib allegro_audio.lib allegro_acodec.lib allegro_font.lib allegro_ttf.lib allegro_primitives.lib allegro_dialog.lib Winmm.lib
         
-        # Prepare the distribution folder
+        # Create a clean deployment folder
         mkdir dist -ErrorAction SilentlyContinue
+        
+        # Copy executable and compiled system binaries
         copy FantasyGame.exe dist\
         copy C:\vcpkg\installed\x64-windows\bin\*.dll dist\
+        
+        # =========================================================================
+        # CRITICAL FIX: Copy all required assets into the distribution folder
+        # =========================================================================
         copy *.png dist\ -ErrorAction SilentlyContinue
         copy *.wav dist\ -ErrorAction SilentlyContinue
         copy *.ttf dist\ -ErrorAction SilentlyContinue
         
-        # Compress the entire folder into a single ZIP for deployment
+        # Compress everything together into the final game deployment archive
         Compress-Archive -Path dist\* -DestinationPath FantasyGame-Windows-Build.zip -Force
 
-    # 6. Authenticate with AWS using my stored Secrets
+    # --- 5. Upload to the Artifacts Tab ---
+    - name: Upload Windows Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FantasyGame-Artifact-ZIP
+        path: FantasyGame-Windows-Build.zip
+
+    # --- 6. Configure AWS Credentials ---
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -73,12 +98,12 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-2
 
-    # 7. Upload the generated ZIP to my specific Ohio S3 bucket
+    # --- 7. Upload to S3 ---
     - name: Upload to S3
       run: |
         aws s3 cp FantasyGame-Windows-Build.zip s3://fantasy-game-bucket-928743224072-us-east-2-an/builds/FantasyGame-v1.0.${{ github.run_number }}.zip
 
-    # 8. Create a formal Release on the GitHub repository page
+    # --- 8. Upload to the Releases Tab ---
     - name: Publish Direct Zip Release
       if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
@@ -88,4 +113,3 @@ jobs:
         draft: false
         prerelease: false
         files: FantasyGame-Windows-Build.zip
-
