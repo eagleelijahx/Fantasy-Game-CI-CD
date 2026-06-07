@@ -1,5 +1,4 @@
-name: C++ CI & CD with Allegro 5
-
+name: C++ CI with Allegro 5
 on:
   push:
     branches: [ "main" ]
@@ -9,12 +8,13 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     # --- 1. Caching Step ---
-    # This saves all downloaded source files and compiled static binaries.
     - name: Restore vcpkg artifacts from cache
       uses: actions/cache@v4
       with:
@@ -32,15 +32,32 @@ jobs:
         vcpkg install allegro5:x64-windows-static
 
     # --- 3. Setup MSVC Compiler Path ---
-    # This fixes the "cl.exe is not recognized" error by loading Developer Command Prompt variables.
     - name: Setup MSVC Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1
 
-    # --- 4. Compile Step (Static) ---
-    # We use /MT to match the static triplet, and link Windows subsystem dependencies required by static Allegro.
+    # --- 4. Compile Step (Static + GCC Header Fix) ---
     - name: Compile Game for Windows (.exe)
       run: |
-        cl.exe /std:c++17 /MT *.cpp /Fe:FantasyGame.exe `
+        # Create a fake bits folder to trick MSVC into finding stdc++.h
+        mkdir bits -ErrorAction SilentlyContinue
+        @'
+        #include <iostream>
+        #include <vector>
+        #include <string>
+        #include <algorithm>
+        #include <cmath>
+        #include <memory>
+        #include <map>
+        #include <set>
+        #include <queue>
+        #include <stack>
+        #include <fstream>
+        #include <sstream>
+'@ | Out-File -FilePath bits\stdc++.h -Encoding utf8
+
+        # Compile with /EHsc exception support and look inside current directory (.) for headers
+        cl.exe /std:c++17 /MT /EHsc *.cpp /Fe:FantasyGame.exe `
+          /I. `
           /I"C:\vcpkg\installed\x64-windows-static\include" `
           /link /LIBPATH:"C:\vcpkg\installed\x64-windows-static\lib" `
           allegro-static.lib allegro_main-static.lib allegro_image-static.lib `
@@ -49,10 +66,20 @@ jobs:
           user32.lib gdi32.lib opengl32.lib winmm.lib shlwapi.lib psapi.lib shell32.lib `
           advapi.lib ole32.lib uuid.lib
 
-    # --- 5. Clean Single-File Upload ---
-    # No more tracking DLLs. This uploads ONLY your standalone FantasyGame.exe inside the ZIP.
+    # --- 5. Clean Single-File Upload (Fallback) ---
     - name: Upload Windows Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: FantasyGame-Standalone-Build
         path: FantasyGame.exe
+
+    # --- 6. Direct Exe Release Publisher ---
+    - name: Publish Direct Exe Release
+      if: github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: Build v1.0.${{ github.run_number }}
+        draft: false
+        prerelease: false
+        files: FantasyGame.exe
