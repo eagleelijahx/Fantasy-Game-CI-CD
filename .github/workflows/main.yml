@@ -14,7 +14,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # --- 1. Caching Step ---
+    # --- 1. Caching Step (Speeds up subsequent runs) ---
     - name: Restore vcpkg artifacts from cache
       uses: actions/cache@v4
       with:
@@ -22,62 +22,56 @@ jobs:
           C:/vcpkg/downloads
           C:/vcpkg/installed
           ~/.vcpkg
-        key: ${{ runner.os }}-vcpkg-static-${{ hashFiles('**/vcpkg.json') }}
+        key: ${{ runner.os }}-vcpkg-dynamic-${{ hashFiles('**/vcpkg.json') }}
         restore-keys: |
-          ${{ runner.os }}-vcpkg-static-
+          ${{ runner.os }}-vcpkg-dynamic-
 
-    # --- 2. Install Step (Static) ---
+    # --- 2. Install Allegro 5 (Back to your original working configuration) ---
     - name: Install Allegro 5 via vcpkg
       run: |
-        vcpkg install allegro5:x64-windows-static
+        vcpkg install allegro5:x64-windows
 
     # --- 3. Setup MSVC Compiler Path ---
     - name: Setup MSVC Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1
 
-    # --- 4. Compile Step (Static + GCC Header Fix) ---
-    - name: Compile Game for Windows (.exe)
+    # --- 4. Compile + Fix GCC Header + Create ZIP Bundle ---
+    - name: Compile Game and Bundle Assets
       run: |
         # Create a fake bits folder to trick MSVC into finding stdc++.h
         mkdir bits -ErrorAction SilentlyContinue
-        
-        # Inject the proxy headers safely using a simple PowerShell string block
-        $headers = @'
+        $headers = '@'
         #include <iostream>
         #include <vector>
         #include <string>
         #include <algorithm>
-        #include <cmath>
-        #include <memory>
-        #include <map>
-        #include <set>
-        #include <queue>
-        #include <stack>
-        #include <fstream>
-        #include <sstream>
         '@
         $headers | Out-File -FilePath bits\stdc++.h -Encoding utf8
 
-        # Compile with /EHsc exception support and look inside current directory (.) for headers
-        cl.exe /std:c++17 /MT /EHsc *.cpp /Fe:FantasyGame.exe `
+        # Compile exactly using your original working project configuration
+        cl.exe /std:c++17 *.cpp /Fe:FantasyGame.exe `
           /I. `
-          /I"C:\vcpkg\installed\x64-windows-static\include" `
-          /link /LIBPATH:"C:\vcpkg\installed\x64-windows-static\lib" `
-          allegro-static.lib allegro_main-static.lib allegro_image-static.lib `
-          allegro_audio-static.lib allegro_acodec-static.lib allegro_font-static.lib `
-          allegro_ttf-static.lib allegro_primitives-static.lib allegro_dialog-static.lib `
-          user32.lib gdi32.lib opengl32.lib winmm.lib shlwapi.lib psapi.lib shell32.lib `
-          advapi.lib ole32.lib uuid.lib
+          /I"C:\vcpkg\installed\x64-windows\include" `
+          /link /LIBPATH:"C:\vcpkg\installed\x64-windows\lib" `
+          allegro.lib allegro_main.lib allegro_image.lib `
+          allegro_audio.lib allegro_acodec.lib allegro_font.lib `
+          allegro_ttf.lib allegro_primitives.lib allegro_dialog-static.lib
 
-    # --- 5. Clean Single-File Upload (Fallback) ---
+        # Create a clean deployment folder, gather the files, and compress them into a ZIP
+        mkdir dist
+        copy FantasyGame.exe dist\
+        copy C:\vcpkg\installed\x64-windows\bin\*.dll dist\
+        Compress-Archive -Path dist\* -DestinationPath FantasyGame-Windows-Build.zip
+
+    # --- 5. Upload to the Artifacts Tab ---
     - name: Upload Windows Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: FantasyGame-Standalone-Build
-        path: FantasyGame.exe
+        name: FantasyGame-Artifact-ZIP
+        path: FantasyGame-Windows-Build.zip
 
-    # --- 6. Direct Exe Release Publisher ---
-    - name: Publish Direct Exe Release
+    # --- 6. Upload to the Releases Tab ---
+    - name: Publish Direct Zip Release
       if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
@@ -85,4 +79,4 @@ jobs:
         name: Build v1.0.${{ github.run_number }}
         draft: false
         prerelease: false
-        files: FantasyGame.exe
+        files: FantasyGame-Windows-Build.zip
