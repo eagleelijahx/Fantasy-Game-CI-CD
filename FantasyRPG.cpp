@@ -16,6 +16,7 @@
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_native_dialog.h>
 #include <ctime>
+#include <windows.h>
 
 // Cross-platform modern C++ replacements for sleep functionality
 #include <thread>
