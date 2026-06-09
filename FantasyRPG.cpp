@@ -5,7 +5,8 @@
 #include "FantasyRPG.h"
 #include <iostream>
 #include <string>
-#include <bits/stdc++.h>
+#include <algorithm> // Required for transform()
+#include <fstream>   // Required for ifstream (checking if audio files exist)
 #include <stdlib.h>
 #include <cstdlib>
 #include <allegro5/allegro.h>
