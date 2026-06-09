@@ -90,22 +90,24 @@ jobs:
         name: FantasyGame-Artifact-ZIP
         path: FantasyGame-Windows-Build.zip
 
-    # --- 6. Configure AWS Credentials ---
+    # --- 6. Configure AWS Credentials (PR-Safe Guard Added) ---
     - name: Configure AWS Credentials
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-2
 
-    # --- 7. Upload to S3 ---
+    # --- 7. Upload to S3 (PR-Safe Guard Added) ---
     - name: Upload to S3
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       run: |
         aws s3 cp FantasyGame-Windows-Build.zip s3://fantasy-game-bucket-928743224072-us-east-2-an/builds/FantasyGame-v1.0.${{ github.run_number }}.zip
    
     # --- 8. Upload to the Releases Tab ---
     - name: Publish Direct Zip Release
-      if: github.ref == 'refs/heads/main'
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v1.0.${{ github.run_number }}
@@ -116,7 +118,7 @@ jobs:
 
     # --- 9. Append CloudFront Link to Release Body ---
     - name: Append CloudFront Link to Release
-      if: github.ref == 'refs/heads/main'
+      if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       shell: pwsh
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,4 +133,4 @@ jobs:
         
         # 3. Update the release using the correct flag (--notes-file)
         gh release edit "$env:RELEASE_TAG" --notes-file current_notes.txt
- 
+
