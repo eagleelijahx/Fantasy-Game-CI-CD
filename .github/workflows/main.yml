@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# Silences Node 20 deprecation warnings and forces the runner to use Node 24
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -42,30 +41,11 @@ jobs:
     - name: Setup MSVC Developer Command Prompt
       uses: ilammy/msvc-dev-cmd@v1
 
-    # --- 4. Compile + Safe Header Injection + Asset Bundling + Create ZIP Bundle ---
+    # --- 4. Clean & Transparent Compilation Step ---
     - name: Compile Game and Bundle Assets
       shell: pwsh
       run: |
-        # Create a fake bits folder to trick MSVC into finding stdc++.h
-        New-Item -ItemType Directory -Force -Path "bits"
-        
-        # Clean, simple echoing to build the proxy header file safely without parsing bugs
-        @'
-        #include <iostream>
-        #include <vector>
-        #include <string>
-        #include <algorithm>
-        #include <cmath>
-        #include <memory>
-        #include <map>
-        #include <set>
-        #include <fstream>
-        #include <windows.h>
-        #include <mmsystem.h>
-        '@ | Out-File -FilePath "bits/stdc++.h" -Encoding utf8
-        
-        # Compile using single-line syntax 
-        # Added /EHsc flag to resolve C++ exception handling errors
+        # Directly compile your standard C++ files using MSVC
         cl.exe /EHsc /std:c++17 /D_HAS_STD_BYTE=0 /DNOMINMAX *.cpp /Fe:FantasyGame.exe /I. /I"C:/vcpkg/installed/x64-windows/include" /link /LIBPATH:"C:/vcpkg/installed/x64-windows/lib" allegro.lib allegro_main.lib allegro_image.lib allegro_audio.lib allegro_acodec.lib allegro_font.lib allegro_ttf.lib allegro_primitives.lib allegro_dialog.lib Winmm.lib
         
         # Create a clean deployment folder
@@ -75,7 +55,7 @@ jobs:
         Copy-Item -Path "FantasyGame.exe" -Destination "dist/" -Force
         Copy-Item -Path "C:/vcpkg/installed/x64-windows/bin/*.dll" -Destination "dist/" -Force -ErrorAction SilentlyContinue
         
-        # CRITICAL FIX: Copy all required assets into the distribution folder if they exist
+        # Copy game audio assets and fonts into the distribution folder
         Copy-Item -Path "*.png" -Destination "dist/" -Force -ErrorAction SilentlyContinue
         Copy-Item -Path "*.wav" -Destination "dist/" -Force -ErrorAction SilentlyContinue
         Copy-Item -Path "*.ttf" -Destination "dist/" -Force -ErrorAction SilentlyContinue
@@ -90,7 +70,7 @@ jobs:
         name: FantasyGame-Artifact-ZIP
         path: FantasyGame-Windows-Build.zip
 
-    # --- 6. Configure AWS Credentials (PR-Safe Guard Added) ---
+    # --- 6. Configure AWS Credentials (PR-Safe Guard) ---
     - name: Configure AWS Credentials
       if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       uses: aws-actions/configure-aws-credentials@v4
@@ -99,7 +79,7 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-2
 
-    # --- 7. Upload to S3 (PR-Safe Guard Added) ---
+    # --- 7. Upload to S3 (PR-Safe Guard) ---
     - name: Upload to S3
       if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
       run: |
@@ -125,14 +105,14 @@ jobs:
         RELEASE_TAG: v1.0.${{ github.run_number }}
         DOWNLOAD_URL: https://dcbc64a200c5t.cloudfront.net/FantasyGame-v1.0.${{ github.run_number }}.zip
       run: |
-        # 1. Fetch current release notes safely into a variable to avoid stream file locking
+        # Fetch current release notes safely into a variable to avoid stream file locking
         $notes = gh release view "$env:RELEASE_TAG" --json body --jq .body
         
-        # 2. Format the new content string
+        # Format the new content string
         $updatedNotes = $notes + "`n`n---`n### 📥 Download via CloudFront (Global CDN)`n[Download Version $env:RELEASE_TAG here]($env:DOWNLOAD_URL)"
         
-        # 3. Output to file safely without pipeline lockouts
+        # Output to file safely without pipeline lockouts
         $updatedNotes | Out-File -FilePath "current_notes.txt" -Encoding utf8
         
-        # 4. Update the release using the static file notes flag
+        # Update the release using the static file notes flag
         gh release edit "$env:RELEASE_TAG" --notes-file "current_notes.txt"
